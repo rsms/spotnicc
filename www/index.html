@@ -1,0 +1,882 @@
+<!DOCTYPE HTML>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Spotnicc</title>
+    <link rel="stylesheet" href="screen.css" type="text/css" media="screen">
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4/jquery.min.js"></script>
+    <!--script type="text/javascript" src="jquery.min.js"></script-->
+    <script type="text/javascript" charset="utf-8">
+
+if (!window.console) window.console={log:function(){}};
+var HAS_LOCAL_STORAGE = (typeof localStorage === 'object');
+var API_URL_BASE = '/api';
+if (document.location.protocol !== 'http:') {
+  API_URL_BASE = 'http://spotni.cc/api';
+} else if (document.location.hostname !== 'spotni.cc') {
+  document.location.hostname = 'spotni.cc';
+}
+
+// tracks changes to form inputs in real time
+function InputChangeTracker($input, validatorFilter, handler, persistKey, paused) {
+  this.$input = $input;
+  this.persistKey = persistKey;
+  var old_value = 0;
+  $input.change(function() {
+    if (persistKey) localStorage[persistKey] = this.value;
+    var current_value = validatorFilter($.trim(this.value));
+    if (old_value && current_value && current_value != old_value) {
+      handler.replacedValid(old_value, current_value);
+    } else if (!old_value && current_value) {
+      handler.becameValid(old_value, current_value);
+    } else if (old_value && !current_value) {
+      handler.resignedValid(old_value, current_value);
+    } else if (current_value != old_value) {
+      handler.firstEntryIsInvalid(old_value, current_value);
+    }
+    old_value = current_value;
+  });
+  // record value
+  this._input = $input[0];
+  this._value = $.trim(this._input.value);
+  // resume unless paused
+  if (!paused)
+    this.resume();
+  // load persisted value
+  if (persistKey && HAS_LOCAL_STORAGE && String($input[0].value).length == 0) {
+    var value = localStorage[persistKey];
+    if (value) $input[0].value = value;
+  } else persistKey = null;
+}
+
+InputChangeTracker.prototype.resume = function(frequency) {
+  clearInterval(this.timer);
+  frequency = parseInt(frequency);
+  var self = this;
+  this.timer = setInterval(function() {
+    if (self._value != (self._value = $.trim(self._input.value))) {
+      self.$input.change();
+    }
+  }, (frequency > 0 && !isNaN(frequency)) ? frequency : 100);
+};
+
+InputChangeTracker.prototype.pause = function() {
+  clearInterval(this.timer);
+  this.timer = null;
+};
+
+
+// spotify playlist utils
+var playlist = {
+  LINK_RE: /(?:open\.spotify\.com\/|spotify:)user[:\/]([^:\/]+)[:\/]playlist[:\/]([a-zA-Z0-9]{22})/,
+
+  // spotify:user:rasmus:playlist:6YIj1qfG7m1QGEYqhtODGN ->
+  //   6YIj1qfG7m1QGEYqhtODGN
+  findFirstValidURIInText: function (text) {
+    var m = this.LINK_RE.exec(text);
+    if (m) return 'spotify:user:'+m[1]+':playlist:'+m[2];
+  }
+};
+
+
+// represents the playlist input logic and state
+var playlistInput = {
+  $view: null, $input: null,
+  
+  showDiagnostic: function(htmlMessage, isError) {
+    if (isError) {
+      this.$diagnostic.removeClass('info');
+    } else {
+      this.$diagnostic.addClass('info');
+    }
+    this.$diagnostic.html(htmlMessage).animate({opacity: 1}, 200);
+  },
+  
+  hideDiagnostic: function () {
+    this.$diagnostic.animate({opacity: 0}, 200);
+  },
+  
+  startCheckingValidity: function (uri) {
+    this.showDiagnostic('Checking playlist... (to modify a query, wait for this to finish)');
+    var self = this;
+    if (this._activeValidateXHR) {
+      this._activeValidateXHR.aborted = true;
+      this._activeValidateXHR.abort();
+    }
+    $.ajax({
+      url: API_URL_BASE+'/playlist/validate',
+      dataType: 'json',
+      data: {uri: uri},
+      timeout: 30000,
+      beforeSend: function (xhr) { self._activeValidateXHR = xhr; },
+      complete: function (xhr, textStatus) {
+        if (self._activeValidateXHR === xhr)
+          self._activeValidateXHR = null;
+        //console.log('textStatus '+textStatus)
+        if (textStatus == 'timeout') {
+          console.log('libspotify playlist validate timed out, probably due '+
+                      'to a non-existing playlist');
+        }
+        if (textStatus !== 'success')
+          self.showDiagnostic('The playlist link is probably invalid', true);
+      },
+      success: function (data, textStatus, xhr) {
+        //console.log('results: ', data, textStatus, xhr);
+        if (typeof data !== 'object' || !data) {
+          //console.log('textStatus '+textStatus)
+          if (!xhr.aborted)
+            self.showDiagnostic('Something went wrong while checking the playlist');
+        } else if (data.status == 0) {
+          //console.log('msg:', data)
+          // resurrect query if the user has not yet input a new query
+          if (data.info && data.info.query) {
+            var queryTextField = queryInput.$input[0];
+            if ($.trim(queryTextField.value) === '') {
+              queryTextField.value = data.info.query;
+              setTimeout(function(){
+                queryTextField.focus();
+                queryTextField.select();
+              },10);
+            }
+            self.showDiagnostic('Yay! This is a valid playlist which is already tracked');
+          } else {
+            self.showDiagnostic('Yay! This is a valid playlist');
+          }
+        } else {
+          self.showDiagnostic(data.message || 'Invalid playlist', true);
+        }
+      }
+    });
+  },
+
+  // still valid but id changed
+  replacedValid: function (oldValue, value) {
+    console.log('playlist link changed: still valid but id changed', 
+                oldValue, '-->', value);
+    this.value = value;
+    document.location.hash = value;
+    // check playlist validity (collaborative, accessible, etc)
+    this.startCheckingValidity(value);
+  },
+  
+  // changed from invalid to valid
+  becameValid: function (oldValue, value) {
+    console.log('playlist link changed: became valid uri', value);
+    this.value = value;
+    queryInput.enable();
+    document.location.hash = value;
+    // check playlist validity (collaborative, accessible, etc)
+    this.startCheckingValidity(value);
+  },
+  
+  // changed from valid to invalid
+  resignedValid: function (oldValue, value) {
+    console.log('playlist link changed: resigned valid id (was '+oldValue+')');
+    this.value = value;
+    queryInput.disable();
+    this.showDiagnostic('Invalid playlist link', true);
+    document.location.hash = '';
+  },
+  
+  // called once at the first entry (but only if invalid. Otherwise
+  // becameValid is called for the first input)
+  firstEntryIsInvalid: function (oldValue, value) {
+    console.log('playlist link changed: first entry and it is not valid');
+    this.value = value;
+    this.showDiagnostic('Invalid playlist link', true);
+    document.location.hash = '';
+  }
+};
+
+
+var queryInput = {
+  $view: null, $input: null,
+  
+  showDiagnostic: function(htmlMessage, isError) {
+    if (isError) {
+      this.$diagnostic.removeClass('info');
+    } else {
+      this.$diagnostic.addClass('info');
+    }
+    this.$diagnostic.html(htmlMessage).animate({opacity: 1}, 200).show();
+  },
+  
+  hideDiagnostic: function () {
+    this.$diagnostic.animate({opacity: 0}, 200, function() { $(this).hide(); });
+  },
+  
+  enable: function() {
+    var self = this;
+    this.$view.animate({opacity:1.0}, 100, function(){
+      $(this).removeClass('disabled');
+      self.$input[0].disabled = false;
+      self.changeTracker.resume();
+    });
+    this.searchResults.$view = this.$view.find('.results');
+    this.$submitButton = this.$view.find('input.submit');
+    // hook up an action for the submit button
+    this.$submitButton.click(function(){ self.submit(this); });
+    // setup region
+    if (!this._hasSetupRegion) {
+      // set region from stored data, if any
+      var region_code_re = /^[A-Z]{2}$/;
+      var regionCode = HAS_LOCAL_STORAGE ? localStorage['region-code'] : null;
+      if (!regionCode) regionCode = 'GB';
+      if (regionCode && regionCode.match(region_code_re)) {
+        regionCode = regionCode.toUpperCase();
+        this.$region[0].value = regionCode;
+        this.regionCode = regionCode;
+      }
+      // register change handler
+      this.$region.change(function() {
+        self.regionCode = this.value.match(region_code_re) ? this.value : null;
+        localStorage['region-code'] = self.regionCode;
+        self.searchResults.update();
+      });
+      this._hasSetupRegion = true;
+    }
+  },
+  
+  disable: function() {
+    this.$view.addClass('disabled').animate({opacity:0.15}, 200);
+    this.$input[0].disabled = true;
+    this.changeTracker.pause();
+    this.$submitButton.unbind();
+  },
+  
+  lockAll: function () {
+    this._submitButton_disabled = this.$submitButton[0].disabled;
+    this.$submitButton[0].disabled = true;
+    this._input_disabled = this.$input[0].disabled;
+    this.$input[0].disabled = true;
+    this.changeTracker.pause();
+    this._playlistInput_input_disabled = playlistInput.$input[0].disabled;
+    playlistInput.$input[0].disabled = true;
+    playlistInput.changeTracker.pause();
+  },
+  
+  unlockAndRestoreAll: function () {
+    this.$submitButton[0].disabled = this._submitButton_disabled;
+    this.$input[0].disabled = this._input_disabled;
+    this.changeTracker.resume();
+    playlistInput.$input[0].disabled = this._playlistInput_input_disabled;
+    playlistInput.changeTracker.resume();
+  },
+  
+  submit: function(sender) {
+    console.log('submit')
+    this.$submitButton.addClass('in-progress');
+    this.$submitButton[0].originalValue = this.$submitButton[0].value;
+    this.$submitButton[0].value = 'Configuring...';
+    this.lockAll();
+    
+    // send "put" request
+    var self = this;
+    var params = {uri: playlistInput.value, query: this.value};
+    if (this._activePutXHR) {
+      this._activePutXHR.aborted = true;
+      this._activePutXHR.abort();
+    }
+    var restoreUI = function () {
+      self.$submitButton.removeClass('in-progress');
+      self.$submitButton[0].value = self.$submitButton[0].originalValue;
+      self.unlockAndRestoreAll();
+    };
+    $.ajax({
+      type: 'POST', url: API_URL_BASE+'/playlist/put',
+      dataType: 'json', // response type
+      data: params,
+      timeout: 60000,
+      beforeSend: function (xhr) { self._activePutXHR = xhr; },
+      complete: function (xhr, textStatus) {
+        if (self._activePutXHR === xhr)
+          self._activePutXHR = null;
+        console.log('textStatus '+textStatus, xhr.responseText);
+        if (textStatus == 'timeout') {
+          self.showDiagnostic('The connection to Spotify timed out. Please try again.', true);
+          restoreUI();
+        } else if (textStatus !== 'success') {
+          self.showDiagnostic('An unknown error occurred. Please try again in a few minutes.', true);
+          restoreUI();
+        }
+      },
+      success: function (data, textStatus, xhr) {
+        //console.log('results: ', data, textStatus, xhr);
+        self.$submitButton.removeClass('in-progress');
+        if (typeof data !== 'object' || !data) {
+          //console.log('textStatus '+textStatus)
+          if (!xhr.aborted)
+            self.showDiagnostic('Something went wrong while configuring the playlist');
+          restoreUI();
+        } else if (data.status == 0) {
+          //console.log('msg:', data)
+          self.$submitButton.hide();
+          $('#step1, #step2, #step3').fadeOut(400, function(){
+            $(this).hide();
+            $('#success').animate({opacity: 1}, 400).show();
+            $('#success').find('.param-uri').each(function() {
+              if (this.href !== undefined) this.href = params.uri;
+              else $(this).text(params.uri);
+            });
+            $('#success').find('.param-query').text(params.query);
+            document.location.hash = '';
+            localStorage.removeItem(playlistInput.changeTracker.persistKey);
+          });
+        } else {
+          self.showDiagnostic(data.message || 'Invalid playlist', true);
+          restoreUI();
+        }
+      }
+    });
+  },
+  
+  searchResults: {
+    $view: null,
+    update: function (data) {
+      if (data) this.data = data;
+      else data = this.data;
+      if (!data) return;
+      var $count = this.$view.find('.count');
+      var $list = this.$view.find('.list');
+      $count.text(data.info.num_results);
+      $list.empty();
+      var A = function(href, text, styleClass) {
+        var a = document.createElement('a');
+        a.setAttribute('href', href);
+        if (styleClass)
+          a.setAttribute('class', styleClass);
+        if (text) a.appendChild(document.createTextNode(text));
+        return a
+      }
+      var i, L, li, $li, a, x, artist, track, limit = 10;
+      for (i=0,L=data.tracks.length; i<L; ++i) {
+        track = data.tracks[i];
+        
+        // check region
+        if (track.album && track.album.availability && queryInput.regionCode) {
+          if (track.album.availability.territories.indexOf(queryInput.regionCode) === -1) {
+            // not available
+            continue;
+          }
+        }
+        
+        li = document.createElement('li');
+        $li = $(li);
+        $li.append(A(track.href, track.name, 'title'));
+        $li.append(document.createTextNode(' by '));
+        for (x=0; x<track.artists.length; ++x) {
+          artist = track.artists[x];
+          $li.append(A(artist.href, artist.name, 'artist'));
+          if (x === track.artists.length-2)
+            $li.append(document.createTextNode(' and '));
+          else if (x < track.artists.length-2)
+            $li.append(document.createTextNode(', '));
+        }
+        
+        $list.append($li);
+        if (--limit === 0) {
+          li = document.createElement('li');
+          li.setAttribute('class', 'more');
+          li.appendChild(document.createTextNode(
+              'and about '+(data.info.num_results - limit)+' more'));
+          $list.append(li);
+          break;
+        }
+      }
+      
+    },
+    
+    clear: function () {
+      this.$view.find('.list').empty();
+    }
+  },
+  
+  sendQuery: function (query) {
+    var self = this;
+    if (self._activeQueryXHR)
+      self._activeQueryXHR.abort();
+    $.ajax({
+      url: 'http://ws.spotify.com/search/1/track.json',
+      dataType: 'json',
+      data: {q: query},
+      timeout: 30000,
+      beforeSend: function (xhr) {
+        self._activeQueryXHR = xhr;
+      },
+      complete: function (xhr, textStatus) {
+        if (self._activeQueryXHR === xhr)
+          self._activeQueryXHR = null;
+      },
+      success: function (data, textStatus, xhr) {
+        //console.log('results: ', data, textStatus, xhr);
+        self.searchResults.update(data);
+      }
+    });
+  },
+  
+  dispatchSendQuery: function (query) {
+    if (!this._sendQueryLatency) {
+      // no latency first time
+      this.sendQuery(query);
+      this._sendQueryLatency = 100;
+      return;
+    } else {
+      this._sendQueryLatency = Math.min(this._sendQueryLatency + 100, 600);
+    }
+    if (this._sendQueryTimer) clearInterval(this._sendQueryTimer);
+    var self = this;
+    this._sendQueryTimer = setTimeout(function(){
+      self._sendQueryTimer = null;
+      self._sendQueryLatency = 100;
+      self.sendQuery(query);
+    }, this._sendQueryLatency);
+  },
+  
+  // --- change handlers ---
+  
+  // still valid but id changed
+  replacedValid: function (oldValue, value) {
+    console.log('query changed: still valid but id changed', 
+                oldValue, '-->', value);
+    this.value = value;
+    this.dispatchSendQuery(value);
+  },
+  
+  // changed from invalid to valid
+  becameValid: function (oldValue, value) {
+    console.log('query changed: became valid id', value);
+    this.value = value;
+    this.searchResults.$view.fadeIn(200);
+    this.dispatchSendQuery(value);
+  },
+  
+  // changed from valid to invalid
+  resignedValid: function (oldValue, value) {
+    console.log('query changed: resigned valid id (was '+oldValue+')');
+    this.value = value;
+    var searchResults = this.searchResults;
+    searchResults.$view.fadeOut(200, function() {
+      searchResults.clear();
+    });
+  },
+  
+  // called once at the first entry (but only if invalid. Otherwise
+  // becameValid is called for the first input)
+  firstEntryIsInvalid: function (oldValue, value) {} // will not happen
+};
+
+
+// remove UI action
+function removePlaylist(uri) {
+  uri = playlist.findFirstValidURIInText(String(uri));
+  if (!uri) {
+    uri = window.prompt('Enter the link to a playlist you wish to un-register');
+    if (!uri || $.trim(String(uri)).length == 0) return;
+    uri = playlist.findFirstValidURIInText(String(uri));
+    if (!uri) {
+      alert('Not a valid playlist link. Please try again with a valid link.');
+      return;
+    }
+  } else if (!window.confirm('Really unregister '+uri+'?')) {
+    return;
+  }
+  $.ajax({
+    url: API_URL_BASE+'/playlist/remove',
+    dataType: 'json', // response type
+    data: {uri: uri},
+    timeout: 30000,
+    complete: function (xhr, textStatus) {
+      var msg;
+      try { msg = $.parseJSON(xhr.responseText); }catch(e){}
+      console.log('complete', xhr, textStatus, msg);
+      if (textStatus == 'timeout')
+        alert('Sorry, the request to unregister a playlist timed out. Please try again.');
+      else if (textStatus === 'success' && xhr.status == 200)
+        alert('Playlist '+uri+' was successfully unregistered');
+      else
+        alert('Sorry, the request to unregister a playlist failed'+
+              (msg && msg.message) ? ': '+msg.message : '');
+    }
+  });
+}
+
+
+$(function(){
+  //$('#step1, #step2, #step3').hide(); return;
+  
+  playlistInput.$view = $('#step2');
+  playlistInput.$input = $('#playlist-input');
+  playlistInput.$diagnostic = playlistInput.$view.find('.diagnostic');
+  playlistInput.changeTracker = new InputChangeTracker(playlistInput.$input,
+      function(value) { return playlist.findFirstValidURIInText(value); },
+      playlistInput, 'playlist-input');
+
+  queryInput.$view = $('#step3');
+  queryInput.$input = $('#query-input');
+  queryInput.$diagnostic = queryInput.$view.find('.diagnostic');
+  queryInput.changeTracker = new InputChangeTracker(queryInput.$input,
+      function(value) { return value; },
+      queryInput, null, false);
+  
+  queryInput.$region = queryInput.$view.find('select.region');
+  
+  // explicit playlist id from url?
+  var requestedPlaylistURI;
+  if (document.location.hash && document.location.hash.length > 1) {
+    requestedPlaylistURI =
+        playlist.findFirstValidURIInText(document.location.hash.substr(1));
+    if (requestedPlaylistURI) {
+      playlistInput.$input.attr('value', requestedPlaylistURI);
+    }
+  }
+  
+  // set initial responder
+  if (requestedPlaylistURI) {
+    queryInput.$input.focus();
+  } else {
+    playlistInput.$input.focus();
+  }
+  
+  //queryInput.showDiagnostic('Hello i grytan');
+});
+
+    </script>
+  </head>
+  <body>
+    <h1>Hi, I'm <abbr title="Spotnicc">☄</abbr></h1>
+    <p>
+      I manage and continuously update Spotify playlists to represent the result
+      of search queries. For instance "new music" or "artist:weezer".
+    </p>
+    <step id="step1">
+      <h2>First, create a new playlist &amp; make it collaborative</h2>
+      <p>
+        Create a new playlist in Spotify and give it whatever name you like.
+        When you have created one, right-click on the playlist and make sure
+        <em>"Collaborative Playlist"</em> is checked in the menu that pops up.
+      </p>
+    </step>
+    <step id="step2">
+      <h2>Then, give me the link</h2>
+      <p>
+        Once again, right-click on the playlist and select "Copy Spotify URI",
+        then paste the link here:
+      </p>
+      <input type="text" id="playlist-input" class="large" name="" value="">
+      <p class="invisible diagnostic">Unknown</p>
+    </step>
+    <step id="step3" class="disabled">
+      <h2>Finally, formulate a search query</h2>
+      <p>
+        <input type="text" id="query-input" class="large" value="">
+      </p>
+      <div class="hidden results">
+        <p class="hidden diagnostic">Unknown</p>
+        <input type="button" class="submit" value="Register or update this playlist &amp; query">
+        <p>
+          Showing a matching sample of tracks available in
+          <select class="region">
+            <option value="AF">Afghanistan</option>
+            <option value="AL">Albania</option>
+            <option value="DZ">Algeria</option>
+            <option value="AS">American Samoa</option>
+            <option value="AD">Andorra</option>
+            <option value="AO">Angola</option>
+            <option value="AI">Anguilla</option>
+            <option value="AQ">Antarctica</option>
+            <option value="AG">Antigua and Barbuda</option>
+            <option value="AR">Argentina</option>
+            <option value="AM">Armenia</option>
+            <option value="AW">Aruba</option>
+            <option value="AU">Australia</option>
+            <option value="AT">Austria</option>
+            <option value="AZ">Azerbaijan</option>
+            <option value="BS">Bahamas</option>
+            <option value="BH">Bahrain</option>
+            <option value="BD">Bangladesh</option>
+            <option value="BB">Barbados</option>
+            <option value="BY">Belarus</option>
+            <option value="BE">Belgium</option>
+            <option value="BZ">Belize</option>
+            <option value="BJ">Benin</option>
+            <option value="BM">Bermuda</option>
+            <option value="BT">Bhutan</option>
+            <option value="BO">Bolivia, Plurinational State of</option>
+            <option value="BA">Bosnia and Herzegovina</option>
+            <option value="BW">Botswana</option>
+            <option value="BV">Bouvet Island</option>
+            <option value="BR">Brazil</option>
+            <option value="IO">British Indian Ocean Territory</option>
+            <option value="BN">Brunei Darussalam</option>
+            <option value="BG">Bulgaria</option>
+            <option value="BF">Burkina Faso</option>
+            <option value="BI">Burundi</option>
+            <option value="KH">Cambodia</option>
+            <option value="CM">Cameroon</option>
+            <option value="CA">Canada</option>
+            <option value="CV">Cape Verde</option>
+            <option value="KY">Cayman Islands</option>
+            <option value="CF">Central African Republic</option>
+            <option value="TD">Chad</option>
+            <option value="CL">Chile</option>
+            <option value="CN">China</option>
+            <option value="CX">Christmas Island</option>
+            <option value="CC">Cocos (Keeling) Islands</option>
+            <option value="CO">Colombia</option>
+            <option value="KM">Comoros</option>
+            <option value="CD">Congo, the Democratic Republic of the</option>
+            <option value="CG">Congo</option>
+            <option value="CK">Cook Islands</option>
+            <option value="CR">Costa Rica</option>
+            <option value="HR">Croatia</option>
+            <option value="CU">Cuba</option>
+            <option value="CY">Cyprus</option>
+            <option value="CZ">Czech Republic</option>
+            <option value="CI">Côte d'Ivoire</option>
+            <option value="DK">Denmark</option>
+            <option value="DJ">Djibouti</option>
+            <option value="DM">Dominica</option>
+            <option value="DO">Dominican Republic</option>
+            <option value="EC">Ecuador</option>
+            <option value="EG">Egypt</option>
+            <option value="SV">El Salvador</option>
+            <option value="GQ">Equatorial Guinea</option>
+            <option value="ER">Eritrea</option>
+            <option value="EE">Estonia</option>
+            <option value="ET">Ethiopia</option>
+            <option value="FK">Falkland Islands (Malvinas)</option>
+            <option value="FO">Faroe Islands</option>
+            <option value="FJ">Fiji</option>
+            <option value="FI">Finland</option>
+            <option value="FR">France</option>
+            <option value="GF">French Guiana</option>
+            <option value="PF">French Polynesia</option>
+            <option value="TF">French Southern Territories</option>
+            <option value="GA">Gabon</option>
+            <option value="GM">Gambia</option>
+            <option value="GE">Georgia</option>
+            <option value="DE">Germany</option>
+            <option value="GH">Ghana</option>
+            <option value="GI">Gibraltar</option>
+            <option value="GR">Greece</option>
+            <option value="GL">Greenland</option>
+            <option value="GD">Grenada</option>
+            <option value="GP">Guadeloupe</option>
+            <option value="GU">Guam</option>
+            <option value="GT">Guatemala</option>
+            <option value="GG">Guernsey</option>
+            <option value="GW">Guinea-Bissau</option>
+            <option value="GN">Guinea</option>
+            <option value="GY">Guyana</option>
+            <option value="HT">Haiti</option>
+            <option value="HM">Heard Island and McDonald Islands</option>
+            <option value="VA">Holy See (Vatican City State)</option>
+            <option value="HN">Honduras</option>
+            <option value="HK">Hong Kong</option>
+            <option value="HU">Hungary</option>
+            <option value="IS">Iceland</option>
+            <option value="IN">India</option>
+            <option value="ID">Indonesia</option>
+            <option value="IR">Iran, Islamic Republic of</option>
+            <option value="IQ">Iraq</option>
+            <option value="IE">Ireland</option>
+            <option value="IM">Isle of Man</option>
+            <option value="IL">Israel</option>
+            <option value="IT">Italy</option>
+            <option value="JM">Jamaica</option>
+            <option value="JP">Japan</option>
+            <option value="JE">Jersey</option>
+            <option value="JO">Jordan</option>
+            <option value="KZ">Kazakhstan</option>
+            <option value="KE">Kenya</option>
+            <option value="KI">Kiribati</option>
+            <option value="KP">Korea, Democratic People's Republic of</option>
+            <option value="KR">Korea, Republic of</option>
+            <option value="KW">Kuwait</option>
+            <option value="KG">Kyrgyzstan</option>
+            <option value="LA">Lao People's Democratic Republic</option>
+            <option value="LV">Latvia</option>
+            <option value="LB">Lebanon</option>
+            <option value="LS">Lesotho</option>
+            <option value="LR">Liberia</option>
+            <option value="LY">Libyan Arab Jamahiriya</option>
+            <option value="LI">Liechtenstein</option>
+            <option value="LT">Lithuania</option>
+            <option value="LU">Luxembourg</option>
+            <option value="MO">Macao</option>
+            <option value="MK">Macedonia, the former Yugoslav Republic of</option>
+            <option value="MG">Madagascar</option>
+            <option value="MW">Malawi</option>
+            <option value="MY">Malaysia</option>
+            <option value="MV">Maldives</option>
+            <option value="ML">Mali</option>
+            <option value="MT">Malta</option>
+            <option value="MH">Marshall Islands</option>
+            <option value="MQ">Martinique</option>
+            <option value="MR">Mauritania</option>
+            <option value="MU">Mauritius</option>
+            <option value="YT">Mayotte</option>
+            <option value="MX">Mexico</option>
+            <option value="FM">Micronesia, Federated States of</option>
+            <option value="MD">Moldova, Republic of</option>
+            <option value="MC">Monaco</option>
+            <option value="MN">Mongolia</option>
+            <option value="ME">Montenegro</option>
+            <option value="MS">Montserrat</option>
+            <option value="MA">Morocco</option>
+            <option value="MZ">Mozambique</option>
+            <option value="MM">Myanmar</option>
+            <option value="NA">Namibia</option>
+            <option value="NR">Nauru</option>
+            <option value="NP">Nepal</option>
+            <option value="AN">Netherlands Antilles</option>
+            <option value="NL">Netherlands</option>
+            <option value="NC">New Caledonia</option>
+            <option value="NZ">New Zealand</option>
+            <option value="NI">Nicaragua</option>
+            <option value="NE">Niger</option>
+            <option value="NG">Nigeria</option>
+            <option value="NU">Niue</option>
+            <option value="NF">Norfolk Island</option>
+            <option value="MP">Northern Mariana Islands</option>
+            <option value="NO">Norway</option>
+            <option value="OM">Oman</option>
+            <option value="PK">Pakistan</option>
+            <option value="PW">Palau</option>
+            <option value="PS">Palestinian Territory</option>
+            <option value="PA">Panama</option>
+            <option value="PG">Papua New Guinea</option>
+            <option value="PY">Paraguay</option>
+            <option value="PE">Peru</option>
+            <option value="PH">Philippines</option>
+            <option value="PN">Pitcairn</option>
+            <option value="PL">Poland</option>
+            <option value="PT">Portugal</option>
+            <option value="PR">Puerto Rico</option>
+            <option value="QA">Qatar</option>
+            <option value="RO">Romania</option>
+            <option value="RU">Russian Federation</option>
+            <option value="RW">Rwanda</option>
+            <option value="RE">Réunion</option>
+            <option value="BL">Saint Barthélemy</option>
+            <option value="SH">Saint Helena, Ascension and Tristan da Cunha</option>
+            <option value="KN">Saint Kitts and Nevis</option>
+            <option value="LC">Saint Lucia</option>
+            <option value="MF">Saint Martin (French part)</option>
+            <option value="PM">Saint Pierre and Miquelon</option>
+            <option value="VC">Saint Vincent and the Grenadines</option>
+            <option value="WS">Samoa</option>
+            <option value="SM">San Marino</option>
+            <option value="ST">Sao Tome and Principe</option>
+            <option value="SA">Saudi Arabia</option>
+            <option value="SN">Senegal</option>
+            <option value="RS">Serbia</option>
+            <option value="SC">Seychelles</option>
+            <option value="SL">Sierra Leone</option>
+            <option value="SG">Singapore</option>
+            <option value="SK">Slovakia</option>
+            <option value="SI">Slovenia</option>
+            <option value="SB">Solomon Islands</option>
+            <option value="SO">Somalia</option>
+            <option value="ZA">South Africa</option>
+            <option value="GS">South Georgia and the South Sandwich Islands</option>
+            <option value="ES">Spain</option>
+            <option value="LK">Sri Lanka</option>
+            <option value="SD">Sudan</option>
+            <option value="SR">Suriname</option>
+            <option value="SJ">Svalbard and Jan Mayen</option>
+            <option value="SZ">Swaziland</option>
+            <option value="SE">Sweden</option>
+            <option value="CH">Switzerland</option>
+            <option value="SY">Syrian Arab Republic</option>
+            <option value="TW">Taiwan, Province of China</option>
+            <option value="TJ">Tajikistan</option>
+            <option value="TZ">Tanzania, United Republic of</option>
+            <option value="TH">Thailand</option>
+            <option value="TL">Timor-Leste</option>
+            <option value="TG">Togo</option>
+            <option value="TK">Tokelau</option>
+            <option value="TO">Tonga</option>
+            <option value="TT">Trinidad and Tobago</option>
+            <option value="TN">Tunisia</option>
+            <option value="TR">Turkey</option>
+            <option value="TM">Turkmenistan</option>
+            <option value="TC">Turks and Caicos Islands</option>
+            <option value="TV">Tuvalu</option>
+            <option value="UG">Uganda</option>
+            <option value="UA">Ukraine</option>
+            <option value="AE">United Arab Emirates</option>
+            <option value="GB" selected>United Kingdom</option>
+            <option value="UM">United States Minor Outlying Islands</option>
+            <option value="US">United States</option>
+            <option value="UY">Uruguay</option>
+            <option value="UZ">Uzbekistan</option>
+            <option value="VU">Vanuatu</option>
+            <option value="VE">Venezuela, Bolivarian Republic of</option>
+            <option value="VN">Viet Nam</option>
+            <option value="VG">Virgin Islands, British</option>
+            <option value="VI">Virgin Islands, U.S.</option>
+            <option value="WF">Wallis and Futuna</option>
+            <option value="EH">Western Sahara</option>
+            <option value="YE">Yemen</option>
+            <option value="ZM">Zambia</option>
+            <option value="ZW">Zimbabwe</option>
+            <option value="AX">Åland Islands</option>
+          </select>
+        </p>
+        <ol class="list">
+        </ol>
+      </div>
+      <h3>Some quick tips on how to construct search queries</h3>
+      <ul class="tips">
+        <li>
+          To find tracks containing any of many words, put a "OR" between the
+          words (e.g. <code>royksopp OR biosphere</code>).
+        </li>
+        <li>
+          Result which must contain all words are produced by simply putting a
+          space between words (e.g. <code>bombay "el guincho"</code> to find
+          tracks containing both the word "bombay" and "el guincho").
+        </li>
+        <li>
+          Labels can be found by the keyword "label:text"
+          (e.g. <code>label:turks</code> to find tracks released on any label
+          with the word "turks" in its name).
+        </li>
+      </ul>
+    </step>
+    <step id="success" class="hidden">
+      <img src="check.png" width="171" height="154" alt="" align="right">
+      <span id="success-uri" class="hidden param-uri"></span>
+      <span id="success-query" class="hidden param-query"></span>
+      <h2>Success</h2>
+      <p>
+        <a href="" class="param-uri">The playlist</a> is now registered and will
+        be updated to reflect the search result for <samp class="param-query"></samp>
+        over time.
+      </p>
+      <p>
+        You can
+        <a href="javascript:removePlaylist($('#success-uri').text())">remove the playlist</a>
+        from our records if you want us to stop update it by visiting this site
+        at any time and using the
+        "<a href="javascript:removePlaylist($('#success-uri').text())">Remove a playlist</a>"
+        link at the bottom of this page.
+      </p>
+      <p>
+        If you want to setup another playlist, simply
+        <a href="javascript:document.location.reload()">refresh this site</a>.
+        To <a href="javascript:document.location.hash='#'+$('#success-uri').text();document.location.reload()">modify an already managed playlist</a>, visit this site and enter the
+        link of the playlist you wish to modify. Update the query and then
+        submit it.
+      <div class="breaker"></div>
+    </step>
+    <footer>
+      Yeah is the creation of Johan Liesén and Rasmus Andersson
+      &mdash;
+      <a href="javascript:removePlaylist()">Remove a playlist</a>
+      &mdash;
+      <a href="http://twitter.com/spotnicc">Contact us through Twitter</a>
+    </footer>
+  </body>
+</html>

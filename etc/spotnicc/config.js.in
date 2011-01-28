@@ -1,0 +1,4 @@
+exports.aws = {
+  keyid: 'xxx',
+  secret:'xxx'
+}
