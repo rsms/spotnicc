@@ -100,7 +100,7 @@ process.on('SIGUSR1', function () {
   console.log('Got SIGUSR1 for "explict update"');
   pendingExplicitDate = new Date;
   if (!running) {
-    findAndUpdatePlaylistsAndReschedule(0);
+    findAndUpdatePlaylistsAndReschedule(-1);
     pendingExplicitDate = null;
   }
 });
