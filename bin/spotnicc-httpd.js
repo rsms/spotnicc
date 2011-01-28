@@ -111,14 +111,14 @@ function requireURIParam(req, res) {
 }
 
 function notifyUpdater(callback) {
-  proc_exec("kill -USR1 `"+
+  var cmd = "kill -USR1 `"+
             "ps xU www-data | "+
             "grep '/var/spotnicc/bin/spotnicc-updater.js' | "+
             "grep -v grep | "+
             "cut -d ' ' -f 1 | "+
-            "tail -n1`",
-    function (err, stdout, stderr) {
-      if (err) console.error('failed to notfiy updater: '+err);
+            "tail -n1`";
+  proc_exec(cmd, function (err, stdout, stderr) {
+      if (err) console.error('failed to notify updater: '+err+' -- '+cmd);
       else console.log('notified updater');
       if (callback) callback(err, stdout, stderr);
   });
