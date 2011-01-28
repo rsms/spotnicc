@@ -10,7 +10,7 @@ var http = require('http');
 var parse_url = require('url').parse;
 var parse_qs = require('querystring').parse;
 var spotnicc = require('spotnicc');
-var proc_exec require('child_process').exec;
+var proc_exec = require('child_process').exec;
 
 var api = {};
 
