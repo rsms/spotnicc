@@ -95,8 +95,10 @@ function scheduleFindAndUpdatePlaylists(minAge) {
 process.on('SIGUSR1', function () {
   console.log('Got SIGUSR1 for "explict update"');
   pendingExplicitDate = new Date;
-  if (!running)
+  if (!running) {
     findAndUpdatePlaylistsAndReschedule();
+    pendingExplicitDate = null;
+  }
 });
 
 // start
