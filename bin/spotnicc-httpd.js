@@ -119,16 +119,11 @@ function notifyUpdater(callback) {
             "cut -d ' ' -f 1 | "+
             "tail -n1`",
     function (err, stdout, stderr) {
-      console.log('stdout: '+stdout);
-      console.log('stderr: '+stderr);
       if (err) console.error('failed to notfiy updater: '+err);
       else console.log('notified updater');
       if (callback) callback(err, stdout, stderr);
   });
 }
-
-notifyUpdater();
-return;
 
 // ----------------------------------------------------------------------------
 
