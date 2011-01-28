@@ -115,7 +115,7 @@ function notifyUpdater(callback) {
             "ps xU www-data | "+
             "grep '/var/spotnicc/bin/spotnicc-updater.js' | "+
             "grep -v grep | "+
-            "cut -d ' ' -f 1 | "+
+            "awk '{print $1}' | "+
             "tail -n1`";
   proc_exec(cmd, function (err, stdout, stderr) {
       if (err) console.error('failed to notify updater: '+err+' -- '+cmd);
