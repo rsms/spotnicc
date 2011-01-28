@@ -35,6 +35,9 @@ NPM
     sudo chmod -R g+w /etc/spotnicc
     # edit /etc/spotnicc/config.js
 
+    sudo ln -sf /var/spotnicc/etc/nginx/sites-available/default \
+                /etc/nginx/sites-enabled/default
+
     sudo ln -s /var/spotnicc/init.d/spotnicc-* /etc/init.d/
     sudo update-rc.d spotnicc-httpd defaults
     sudo update-rc.d spotnicc-updater defaults
