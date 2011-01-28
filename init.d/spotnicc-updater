@@ -75,7 +75,8 @@ do_start() {
                       --exec $SUPERVISOR --chuid $USER:$GROUP -- \
                       $SUPERVISOR_ARGS \
                       --name=$NAME --pidfile=$PIDFILE \
-                      --stdout=$LOGDIR/$NAME.out \
+                      --stdout=$LOGDIR/$NAME.log \
+                      --stderr=$LOGDIR/$NAME.log \
                       --errlog=$LOGDIR/$NAME.err \
                       -- "$NODE_PROGRAM" $NODE_ARGS
     STATUS="$?"
