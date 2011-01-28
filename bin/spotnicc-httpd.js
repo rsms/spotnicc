@@ -220,9 +220,9 @@ api['/playlist/validate'] = function (req, res) {
   });
   setupToKillProcessOnConnectionAbort(req, proc);
   proc.stderr.on('data', function (data) {
-    console.error('[libspotify:err /playlist/validate] '+data.toString('utf8').replace(/\n$/,''));
+    console.error('[validate:stderr] '+data.toString('utf8').replace(/\n$/,''));
   });
   proc.stdout.on('data', function (data) {
-    console.error('[libspotify:out /playlist/validate] '+data.toString('utf8').replace(/\n$/,''));
+    console.error('[validate:stdout] '+data.toString('utf8').replace(/\n$/,''));
   });
 }
