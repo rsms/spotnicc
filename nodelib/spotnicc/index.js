@@ -129,8 +129,7 @@ function putPlaylist(uri, query, last_updated, callback) {
   if (typeof last_updated === 'function') {
     callback = last_updated;
     last_updated = 0;
-  } else if (typeof last_updated !== 'number' || last_updated < 1) {
-    console.log('typeof last_updated: %s (%j)', typeof last_updated, last_updated);
+  } else if (typeof last_updated !== 'number' || last_updated < 0) {
     last_updated = (new Date).getTime();
   }
   var attrs = {query:query, last_updated:last_updated};
