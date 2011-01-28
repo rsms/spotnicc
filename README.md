@@ -1,5 +1,11 @@
 # Spotnicc
 
+## Deploying
+
+Hack and git push then:
+
+    ssh spotni.cc /var/spotnicc/update.sh
+
 ## Server setup
 
 Ubuntu >=10
