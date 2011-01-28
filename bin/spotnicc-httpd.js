@@ -4,7 +4,6 @@ var BIND_ADDR = '127.0.0.1';
 var BIND_PORT = 8124;
 var API_PREFIX = '/api';
 var ALLOW_CORS = true;
-var PUT_TIMESTAMP_OFFSET = -(1000*60*60*4); // 4 hours old
 
 var http = require('http');
 var parse_url = require('url').parse;
@@ -151,7 +150,7 @@ api['/playlist/put'] = function (req, res) {
   var proc = spotnicc.execValidatePlaylist(uri, function (msg, httpStatus) {
     if (msg.status === 0) {
       // Add or update the database
-      var timestamp = (new Date).getTime() + PUT_TIMESTAMP_OFFSET;
+      var timestamp = 0;
       spotnicc.sdb.putPlaylist(uri, query, timestamp, function (err) {
         if (err) {
           httpStatus = 500;

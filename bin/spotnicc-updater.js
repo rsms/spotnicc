@@ -44,6 +44,10 @@ function findAndUpdatePlaylists (minAge, callback) {
   if (typeof minAge !== 'number')
     minAge = 1000*60*60; // 1h
   var minTime = String((new Date).getTime()-minAge);
+  if (minAge < 0) {
+    // special case
+    minTime = -minAge;
+  }
   running = true;
   var finalCallback = function() {
     running = false;
@@ -68,10 +72,9 @@ function findAndUpdatePlaylistsAndReschedule(minAge) {
     if (pendingExplicitDate) {
       // looks like we received some pending explicit updates during last run.
       // re-schedule immediately
-      var minAge2 = ((new Date) - pendingExplicitDate) - 1000*60; // 1min margin
       console.log('rescheduling immediately (pending explicit updates)');
       pendingExplicitDate = null;
-      findAndUpdatePlaylistsAndReschedule(minAge2);
+      findAndUpdatePlaylistsAndReschedule(-1);
     } else {
       scheduleFindAndUpdatePlaylists();
     }
