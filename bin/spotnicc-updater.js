@@ -53,7 +53,8 @@ function findAndUpdatePlaylists (minAge, callback) {
   spotnicc.sdb.findPlaylistsNotUpdatedSince(minTime, true, function(err, playlists, meta) {
     //console.log('meta => ', meta)
     if (err) throw err;
-    console.log('found %d playlists', playlists.length);
+    console.log('found %d playlists not updated in %d seconds',
+                playlists.length, Math.round(minAge/1000));
     // playlists => [ { '$ItemName': 'spotify:user:rasmus:playlist:0xYvy4zC1uP1GqkGYwhmGv',
     //  query: 'royksopp OR robyn',
     //  last_updated: '1296074452706' } ]
