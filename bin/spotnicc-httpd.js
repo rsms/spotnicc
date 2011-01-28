@@ -112,13 +112,18 @@ function requireURIParam(req, res) {
 }
 
 function notifyUpdater(callback) {
-  proc_exec("kill -USR1 `pgrep -f '/var/spotnicc/bin/spotnicc-updater.js' | tail -n1`",
+  proc_exec("echo kill -USR1 `pgrep -f '/var/spotnicc/bin/spotnicc-updater.js' | tail -n1`",
     function (err, stdout, stderr) {
+      console.log('stdout: '+stdout);
+      console.log('stderr: '+stderr);
       if (err) console.error('failed to notfiy updater: '+err);
       else console.log('notified updater');
       if (callback) callback(err, stdout, stderr);
   });
 }
+
+notifyUpdater();
+return;
 
 // ----------------------------------------------------------------------------
 
