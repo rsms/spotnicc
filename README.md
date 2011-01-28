@@ -12,9 +12,13 @@ Ubuntu >=10
 
 ### Install packages
 
-    apt-get install ...TODO
+    apt-get install nginx TODO
 
-NPM
+Node.js:
+
+    >=0.3.7
+
+NPM:
 
     sudo echo && curl http://npmjs.org/install.sh | sudo sh
     sudo chgrp -R www-data /usr/local/lib/node
@@ -43,4 +47,5 @@ NPM
     sudo update-rc.d spotnicc-updater defaults
     sudo invoke-rc.d spotnicc-httpd start
     sudo invoke-rc.d spotnicc-updater start
+    sudo invoke-rc.d nginx restart
 
