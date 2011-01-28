@@ -49,7 +49,8 @@ function refreshPlaylist(playlistURI, query, callback) {
   var timeUpdated = (new Date).getTime();
   proc.on('exit', wrapProgramExitHandler(function(msg, httpStatus){
     if (msg.status === 0) {
-      sdb.putItem('spotnicc_playlists', uri, {last_updated:timeUpdated}, function(err) {
+      var attrs = {last_updated:timeUpdated};
+      sdb.putItem('spotnicc_playlists', playlistURI, attrs, function(err) {
         if (callback) callback(err, msg, httpStatus);
       });
     } else {
