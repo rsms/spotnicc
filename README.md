@@ -29,7 +29,9 @@ NPM
 
 ### Configure & start services
 
-    sudo ln -s /var/spotnicc/init.d/spotnicc-httpd /etc/init.d/
+    sudo ln -s /var/spotnicc/init.d/spotnicc-* /etc/init.d/
     sudo update-rc.d spotnicc-httpd defaults
+    sudo update-rc.d spotnicc-updater defaults
     sudo invoke-rc.d spotnicc-httpd start
+    sudo invoke-rc.d spotnicc-updater start
 
