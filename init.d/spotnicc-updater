@@ -109,7 +109,7 @@ do_stop() {
 }
 
 do_restart() {
-  do_stop || return $?
+  do_stop
   do_start || return $?
   return 0
 }
