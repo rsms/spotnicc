@@ -77,10 +77,5 @@ function scheduleFindAndUpdatePlaylists(minAge) {
   }
 }
 
-// pid file
-var pidfile = __filename + '.pid';
-fs.writeFileSync(pidfile, String(process.pid));
-process.on('exit', function () { fs.unlinkSync(pidfile); });
-
 // start
 scheduleFindAndUpdatePlaylists(1000);

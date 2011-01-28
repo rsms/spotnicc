@@ -29,6 +29,12 @@ NPM
 
 ### Configure & start services
 
+    sudo mkdir /etc/spotnicc
+    sudo cp /var/spotnicc/etc/spotnicc/config.js.in /etc/spotnicc/config.js
+    sudo chown -R www-data:www-data /etc/spotnicc
+    sudo chmod -R g+w /etc/spotnicc
+    # edit /etc/spotnicc/config.js
+
     sudo ln -s /var/spotnicc/init.d/spotnicc-* /etc/init.d/
     sudo update-rc.d spotnicc-httpd defaults
     sudo update-rc.d spotnicc-updater defaults
