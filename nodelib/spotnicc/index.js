@@ -107,6 +107,8 @@ function findPlaylistsNotUpdatedSince(timestamp, consistentRead, callback) {
   }
   var override = {};
   if (consistentRead) override = {ConsistentRead:'true'};
+  console.log("select * from spotnicc_playlists where last_updated < '%d' order by last_updated (now=%d)",
+              timestamp, (new Date).getTime());
   sdb.select("select * from spotnicc_playlists where last_updated < '?' order by last_updated",
              [String(timestamp)], override, wrapcb(callback))
 }
