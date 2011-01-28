@@ -7,5 +7,7 @@ cd "$(dirname "$0")"
 sudo -Hu www-data git pull origin master
 sudo -Hu www-data git submodule update --init
 
-invoke-rc.d spotnicc-httpd restart
-invoke-rc.d spotnicc-updater restart
+if [ "$1" == "restart" ]; then
+  invoke-rc.d spotnicc-httpd restart
+  invoke-rc.d spotnicc-updater restart
+fi
