@@ -69,9 +69,8 @@ function findAndUpdatePlaylistsAndReschedule(minAge) {
     if (pendingExplicitDate) {
       // looks like we received some pending explicit updates during last run.
       // re-schedule immediately
-      var minAge2 = ((new Date) - pendingExplicitDate) + 1000*60; // 1min margin
-      console.log('rescheduling immediately (pending explicit updates, age=%ds)',
-                  Math.round(minAge2/1000));
+      var minAge2 = ((new Date) - pendingExplicitDate) - 1000*60; // 1min margin
+      console.log('rescheduling immediately (pending explicit updates)');
       pendingExplicitDate = null;
       findAndUpdatePlaylistsAndReschedule(minAge2);
     } else {
@@ -98,7 +97,7 @@ process.on('SIGUSR1', function () {
   console.log('Got SIGUSR1 for "explict update"');
   pendingExplicitDate = new Date;
   if (!running) {
-    findAndUpdatePlaylistsAndReschedule();
+    findAndUpdatePlaylistsAndReschedule(0);
     pendingExplicitDate = null;
   }
 });
