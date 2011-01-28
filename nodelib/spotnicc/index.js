@@ -99,11 +99,10 @@ function findPlaylistsNotUpdatedSince(timestamp, consistentRead, callback) {
     callback = consistentRead;
     consistentRead = false;
   }
-  if (typeof timestamp !== 'number') {
-    if (typeof timestamp === 'object' && timestamp instanceof Date)
-      timestamp = timestamp.getTime();
-    else
-      timestamp = (new Date).getTime();
+  if (typeof timestamp === 'object' && timestamp instanceof Date) {
+    timestamp = timestamp.getTime();
+  } else if (typeof timestamp !== 'number' && typeof timestamp !== 'string') {
+    timestamp = (new Date).getTime();
   }
   var override = {};
   if (consistentRead) override = {ConsistentRead:'true'};

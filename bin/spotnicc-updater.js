@@ -48,6 +48,7 @@ function findAndUpdatePlaylists (minAge, callback) {
     // special case
     minTime = -minAge;
   }
+  console.log('minAge:%j, minTime:%j', minAge, minTime);
   running = true;
   var finalCallback = function() {
     running = false;
