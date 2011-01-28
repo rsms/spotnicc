@@ -133,6 +133,7 @@ function putPlaylist(uri, query, last_updated, callback) {
     last_updated = (new Date).getTime();
   }
   var attrs = {query:query, last_updated:last_updated};
+  console.log('spotnicc_playlists[%j] << %j', uri, attrs);
   sdb.putItem('spotnicc_playlists', uri, attrs, callback);
 }
 sdb.putPlaylist = putPlaylist;
