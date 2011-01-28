@@ -29,7 +29,7 @@ RELOAD_SIGNAL=1 # HUP
 
 # Node.js
 NODE_PROGRAM=/usr/local/bin/node
-NODE_SCRIPT=/var/spotnicc/server/spotnicc-httpd.js
+NODE_SCRIPT=/var/spotnicc/bin/spotnicc-httpd.js
 NODE_ARGS="$NODE_SCRIPT"
 
 # Daemon supervisor config
