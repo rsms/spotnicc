@@ -10,6 +10,7 @@ var http = require('http');
 var parse_url = require('url').parse;
 var parse_qs = require('querystring').parse;
 var spotnicc = require('spotnicc');
+var proc_exec require('child_process').exec;
 
 var api = {};
 
@@ -110,6 +111,15 @@ function requireURIParam(req, res) {
   return uri;
 }
 
+function notifyUpdater(callback) {
+  proc_exec("kill -USR1 $(pgrep -f '/var/spotnicc/bin/spotnicc-updater.js' | tail -n1)",
+    function (err, stdout, stderr) {
+      if (err) console.error('failed to notfiy updater: '+err);
+      else console.log('notified updater');
+      if (callback) callback(err, stdout, stderr);
+  });
+}
+
 // ----------------------------------------------------------------------------
 
 // add or update a playlist
@@ -142,6 +152,9 @@ api['/playlist/put'] = function (req, res) {
           httpStatus = 500;
           msg.status = 1;
           msg.message = String(err.stack || err);
+        } else {
+          // notify the updater that there are fresh playlists
+          notifyUpdater();
         }
         res.respond(httpStatus, msg);
       })
