@@ -49,7 +49,7 @@ function refreshPlaylist(playlistURI, query, callback) {
   var timeUpdated = (new Date).getTime();
   proc.on('exit', wrapProgramExitHandler(function(msg, httpStatus){
     if (msg.status === 0) {
-      var attrs = {last_updated:timeUpdated};
+      var attrs = {last_updated:String(timeUpdated)};
       sdb.putItem('spotnicc_playlists', playlistURI, attrs, function(err) {
         if (callback) callback(err, msg, httpStatus);
       });
@@ -88,7 +88,9 @@ function wrapcb(callback) {
 
 
 function findPlaylistsForQuery(query, callback) {
-  sdb.select("select * from spotnicc_playlists where query = '?' and last_updated is not null order by last_updated",
+  sdb.select("select * from spotnicc_playlists "+
+             "where query = '?' and last_updated is not null "+
+             "order by last_updated",
              [query], wrapcb(callback))
 }
 sdb.findPlaylistsForQuery = findPlaylistsForQuery;
@@ -106,9 +108,8 @@ function findPlaylistsNotUpdatedSince(timestamp, consistentRead, callback) {
   }
   var override = {};
   if (consistentRead) override = {ConsistentRead:'true'};
-  console.log("select * from spotnicc_playlists where last_updated < '%d' order by last_updated (now=%d)",
-              timestamp, (new Date).getTime());
-  sdb.select("select * from spotnicc_playlists where last_updated < '?' order by last_updated",
+  sdb.select("select * from spotnicc_playlists "+
+             "where last_updated < '?' order by last_updated",
              [String(timestamp)], override, wrapcb(callback))
 }
 sdb.findPlaylistsNotUpdatedSince = findPlaylistsNotUpdatedSince;
@@ -132,7 +133,7 @@ function putPlaylist(uri, query, last_updated, callback) {
   } else if (typeof last_updated !== 'number' || last_updated < 0) {
     last_updated = (new Date).getTime();
   }
-  var attrs = {query:query, last_updated:last_updated};
+  var attrs = {query:query, last_updated:String(last_updated)};
   console.log('spotnicc_playlists[%j] << %j', uri, attrs);
   sdb.putItem('spotnicc_playlists', uri, attrs, callback);
 }
