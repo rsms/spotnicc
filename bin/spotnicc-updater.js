@@ -3,6 +3,11 @@ require.paths.unshift(__dirname+'/../nodelib');
 var writeError = process.binding('stdio').writeError;
 var spotnicc = require('spotnicc');
 
+var scheduleTimer, lastRunDate,
+    running = false,
+    pendingExplicitDate,
+    baseDelay = 1000*60*30; // every 30 minutes
+
 /*spotnicc.sdb.putItem('spotnicc_playlists', 'spotify:user:rasmus:playlist:0xYvy4zC1uP1GqkGYwhmGv',
             {query:'royksopp OR robyn', last_updated:(new Date).getTime()}, function(error) {
   spotnicc.sdb.getItem('spotnicc_playlists', 'spotify:user:rasmus:playlist:0xYvy4zC1uP1GqkGYwhmGv', function(error, result) {
@@ -31,51 +36,68 @@ function updateNextPlaylist(playlistQueue, onUpdated, finalCallback) {
     if (onUpdated) onUpdated(playlist, msg);
     updateNextPlaylist(playlistQueue, onUpdated, finalCallback);
   });
-  proc.stderr.on('data', function (data) {
-    writeError(data.toString('utf8'));
-  });
-  proc.stdout.on('data', function (data) {
-    process.stdout.write(data);
-  });
+  var fwdout = function (data) { process.stdout.write(data); }
+  proc.stderr.on('data', fwdout);
+  proc.stdout.on('data', fwdout);
 }
 
 function findAndUpdatePlaylists (minAge, callback) {
-  if (typeof minAge !== 'number') minAge = 1000*60*60; // 1h
-  var one_hour_ago = String((new Date).getTime()-minAge);
-  spotnicc.sdb.findPlaylistsNotUpdatedSince(one_hour_ago, function (err, playlists, meta) {
+  if (typeof minAge !== 'number')
+    minAge = 1000*60*60; // 1h
+  var minTime = String((new Date).getTime()-minAge);
+  running = true;
+  var finalCallback = function() {
+    running = false;
+    if (callback) callback();
+  }
+  spotnicc.sdb.findPlaylistsNotUpdatedSince(minTime, function (err, playlists, meta) {
     //console.log('meta => ', meta)
     if (err) throw err;
     console.log('playlists ->', playlists);
     // playlists => [ { '$ItemName': 'spotify:user:rasmus:playlist:0xYvy4zC1uP1GqkGYwhmGv',
     //  query: 'royksopp OR robyn',
     //  last_updated: '1296074452706' } ]
-    updateNextPlaylist(playlists, null, callback);
+    updateNextPlaylist(playlists, null, finalCallback);
   });
 }
 
-var scheduleTimer, lastRunDate,
-    baseDelay = 1000*60*5; // every 5 minutes
+function findAndUpdatePlaylistsAndReschedule(minAge) {
+  clearTimeout(scheduleTimer);
+  lastRunDate = new Date;
+  findAndUpdatePlaylists(minAge, function() {
+    if (pendingExplicitDate) {
+      // looks like we received some pending explicit updates during last run.
+      // re-schedule immediately
+      console.log('rescheduling immediately (pending explicit updates)');
+      var minAge2 = ((new Date) - pendingExplicitDate) + 1000*60; // 1min margin
+      pendingExplicitDate = null;
+      findAndUpdatePlaylistsAndReschedule(minAge2);
+    } else {
+      scheduleFindAndUpdatePlaylists();
+    }
+  });
+}
+
 function scheduleFindAndUpdatePlaylists(minAge) {
-  if (scheduleTimer) {
-    clearTimeout(scheduleTimer);
-    scheduleTimer = null;
-  }
+  clearTimeout(scheduleTimer);
   var timeSinceLastRun = lastRunDate ? ((new Date) - lastRunDate) : baseDelay;
   var delay = baseDelay - timeSinceLastRun;
-  var start = function(){
-    lastRunDate = new Date;
-    findAndUpdatePlaylists(minAge, function() {
-      scheduleFindAndUpdatePlaylists();
-    });
-  };
   if (delay > 0) {
     console.log('schedule: run in %d seconds', delay/1000);
-    scheduleTimer = setTimeout(start, delay);
+    scheduleTimer = setTimeout(function(){ findAndUpdatePlaylistsAndReschedule(minAge) }, delay);
   } else {
-    console.log('schedule: run now');
-    start();
+    //console.log('schedule: run now');
+    findAndUpdatePlaylistsAndReschedule(minAge);
   }
 }
+
+// signal handler for "explicit update" event
+process.on('SIGUSR1', function () {
+  console.log('Got SIGUSR1 for "explict update"');
+  pendingExplicitDate = new Date;
+  if (!running)
+    findAndUpdatePlaylistsAndReschedule();
+});
 
 // start
 scheduleFindAndUpdatePlaylists(1000);
