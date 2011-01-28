@@ -4,7 +4,7 @@ try { config = require('/etc/spotnicc/config'); }catch(e){
       config = require(__dirname+'/../../etc/spotnicc/config'); }
 
 var PROC_CWD = '/var/run/spotnicc';
-var PROC_PROGRAM_CONFIGURE = '/var/spotnicc/bin/yeah';
+var PROC_PROGRAM_REFRESH = '/var/spotnicc/bin/yeah';
 var PROC_PROGRAM_VALIDATE = '/var/spotnicc/bin/collab';
 
 var sdb = exports.sdb = new require('simpledb').SimpleDB(config.aws);
@@ -40,15 +40,26 @@ function wrapProgramExitHandler(exitHandler, okHttpStatus/*=200*/) {
   }
 }
 
-// Configure a playlist by executing the appropriate libspotify tool
-function execConfigurePlaylist(playlistURI, query, exitHandler) {
-  var proc = child_process.spawn(PROC_PROGRAM_CONFIGURE, [playlistURI, query], {
+// Refresh a playlist by executing the appropriate libspotify tool
+// refreshPlaylist(playlistURI, query, [callback(err, msg, httpStatus)]) -> proc
+function refreshPlaylist(playlistURI, query, callback) {
+  var proc = child_process.spawn(PROC_PROGRAM_REFRESH, [playlistURI, query], {
     cwd:PROC_CWD
   });
-  proc.on('exit', wrapProgramExitHandler(exitHandler, 201));
+  var timeUpdated = (new Date).getTime();
+  proc.on('exit', wrapProgramExitHandler(function(msg, httpStatus){
+    if (msg.status === 0) {
+      sdb.putItem('spotnicc_playlists', uri, {last_updated:timeUpdated}, function(err) {
+        if (callback) callback(err, msg, httpStatus);
+      });
+    } else {
+      var err = new Error(msg.message || 'unknown exec error');
+      if (callback) callback(err, msg, httpStatus);
+    }
+  }, 201));
   return proc
 }
-exports.execConfigurePlaylist = execConfigurePlaylist;
+exports.refreshPlaylist = refreshPlaylist;
 
 // Validate a playlist by executing the appropriate libspotify tool
 function execValidatePlaylist(playlistURI, exitHandler) {

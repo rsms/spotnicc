@@ -21,17 +21,16 @@ function updateNextPlaylist(playlistQueue, onUpdated, finalCallback) {
     finalCallback();
     return;
   }
-  console.log('Updating %j', playlist);
+  console.log('updating %j', playlist);
   
   // update timestamp
   spotnicc.setPlaylistLastUpdated(playlist);
   
-  //setTimeout(function(){updateNextPlaylist(playlistQueue, onUpdated, finalCallback);},1000);return;
-  var proc = spotnicc.execConfigurePlaylist(playlist['$ItemName'], playlist.query, function (msg) {
-    if (msg.status != 0) {
-      console.error('Failed to update %j [%d] %s', playlist, msg.status, msg.message);
+  var proc = spotnicc.refreshPlaylist(playlist['$ItemName'], playlist.query, function (err, msg) {
+    if (err) {
+      console.error('failed to update %j [%d] %s', playlist, msg.status, err.message);
     } else {
-      console.log('Updated %j', playlist);
+      console.log('updated %j', playlist);
     }
     if (onUpdated) onUpdated(playlist, msg);
     updateNextPlaylist(playlistQueue, onUpdated, finalCallback);
