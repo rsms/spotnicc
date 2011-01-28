@@ -102,4 +102,5 @@ process.on('SIGUSR1', function () {
 });
 
 // start
+console.log('starting')
 scheduleFindAndUpdatePlaylists(1000);
