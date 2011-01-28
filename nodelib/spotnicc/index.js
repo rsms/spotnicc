@@ -74,23 +74,32 @@ function wrapcb(callback) {
   }
 }
 
+
 function findPlaylistsForQuery(query, callback) {
   sdb.select("select * from spotnicc_playlists where query = '?' and last_updated is not null order by last_updated",
              [query], wrapcb(callback))
 }
 sdb.findPlaylistsForQuery = findPlaylistsForQuery;
 
-function findPlaylistsNotUpdatedSince(timestamp, callback) {
+
+function findPlaylistsNotUpdatedSince(timestamp, consistentRead, callback) {
+  if (typeof consistentRead === 'function') {
+    callback = consistentRead;
+    consistentRead = false;
+  }
   if (typeof timestamp !== 'number') {
     if (typeof timestamp === 'object' && timestamp instanceof Date)
       timestamp = timestamp.getTime();
     else
       timestamp = (new Date).getTime();
   }
+  var override = {};
+  if (consistentRead) override = {ConsistentRead:'true'};
   sdb.select("select * from spotnicc_playlists where last_updated < '?' order by last_updated",
-             [String(timestamp)], wrapcb(callback))
+             [String(timestamp)], override, wrapcb(callback))
 }
 sdb.findPlaylistsNotUpdatedSince = findPlaylistsNotUpdatedSince;
+
 
 function findPlaylistWithURI(uri, callback) {
   sdb.getItem('spotnicc_playlists', uri, function(err, result) {
@@ -100,6 +109,7 @@ function findPlaylistWithURI(uri, callback) {
   });
 }
 sdb.findPlaylistWithURI = findPlaylistWithURI;
+
 
 // putPlaylist(uri, query, [last_updated=now,] callback(err))
 function putPlaylist(uri, query, last_updated, callback) {
@@ -114,11 +124,13 @@ function putPlaylist(uri, query, last_updated, callback) {
 }
 sdb.putPlaylist = putPlaylist;
 
+
 // removePlaylist(uri, callback(err))
 function removePlaylist(uri, callback) {
   sdb.deleteItem('spotnicc_playlists', uri, callback);
 }
 sdb.removePlaylist = removePlaylist;
+
 
 // -----------------------------------------------------------------------------
 // playlist helpers
