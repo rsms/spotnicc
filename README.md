@@ -19,7 +19,7 @@ NPM
 
     sudo mkdir /var/spotnicc
     sudo chown www-data:www-data /var/spotnicc
-    git clone <repo url> /var/spotnicc
+    sudo -Hu www-data git clone git@github.com:rsms/spotnicc.git /var/spotnicc
 
 ### Configure & start services
 
