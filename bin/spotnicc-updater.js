@@ -25,12 +25,12 @@ function updateNextPlaylist(playlistQueue, onUpdated, finalCallback) {
   
   // update timestamp
   spotnicc.setPlaylistLastUpdated(playlist);
-  
-  var proc = spotnicc.refreshPlaylist(playlist['$ItemName'], playlist.query, function (err, msg) {
+  var uri = playlist['$ItemName'];
+  var proc = spotnicc.refreshPlaylist(uri, playlist.query, function (err, msg) {
     if (err) {
-      console.error('failed to update %j [%d] %s', playlist, msg.status, err.message);
+      console.error('failed to update %s [%d] %s', uri, msg.status, err.message);
     } else {
-      console.log('updated %j', playlist);
+      console.log('updated %s', uri);
     }
     if (onUpdated) onUpdated(playlist, msg);
     updateNextPlaylist(playlistQueue, onUpdated, finalCallback);
