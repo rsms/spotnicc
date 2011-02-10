@@ -62,6 +62,7 @@ http.createServer(function (req, res) {
         try {
           handler(req, res);
         } catch (e) {
+          console.error(e);
           res.respond(500, {message:e.stack||e});
         }
       });
@@ -70,11 +71,13 @@ http.createServer(function (req, res) {
         try {
           handler(req, res);
         } catch (e) {
+          console.error(e);
           res.respond(500, {message:e.stack||e});
         }
       });
     }
   } catch (err) {
+    console.error(err);
     res.respond(500, err.stack || err);
   }
 }).listen(BIND_PORT, BIND_ADDR, function () {
@@ -155,7 +158,7 @@ api['/playlist/put'] = function (req, res) {
         if (err) {
           httpStatus = 500;
           msg.status = 1;
-          msg.message = String(err.stack || err);
+          msg.message = err.stack || err;
         } else {
           // notify the updater that there are fresh playlists
           notifyUpdater();
