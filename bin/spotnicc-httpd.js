@@ -62,7 +62,7 @@ http.createServer(function (req, res) {
         try {
           handler(req, res);
         } catch (e) {
-          res.respond(500, {message:e.stack||String(e)});
+          res.respond(500, {message:e.stack||e});
         }
       });
     } else {
@@ -70,7 +70,7 @@ http.createServer(function (req, res) {
         try {
           handler(req, res);
         } catch (e) {
-          res.respond(500, {message:e.stack||String(e)});
+          res.respond(500, {message:e.stack||e});
         }
       });
     }
