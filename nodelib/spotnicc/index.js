@@ -2,7 +2,7 @@ var child_process = require('child_process');
 var config;
 try { config = require('/etc/spotnicc/config'); }catch(e){
       config = require(__dirname+'/../../etc/spotnicc/config'); }
-
+console.log('config:', config);
 var PROC_CWD = '/var/run/spotnicc';
 var PROC_PROGRAM_REFRESH = '/var/spotnicc/bin/yeah';
 var PROC_PROGRAM_VALIDATE = '/var/spotnicc/bin/collab';
